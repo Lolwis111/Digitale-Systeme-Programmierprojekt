@@ -71,7 +71,6 @@ typedef struct graph_t /* this represents the graph in a graph-like structure */
 	uint32_t count; /* how many nodes there are */
 	uint32_t limit; /* for how much nodes we have space */
 	node_t *vertices; /* the nodes itself */
-	uint32_t *mapping; /* hastable for mapping ids to indices */
 } graph_t;
 
 bool buildGraph(savehouses_t*, edges_t*, graph_t*);
@@ -250,7 +249,6 @@ int main(void)
 	graph1.count = 0;
 	graph1.limit = MEMORY_START_SIZE * 2;
 	graph1.vertices = (node_t*)calloc(graph1.limit, sizeof(node_t));
-	graph1.mapping = (uint32_t*)malloc(graph1.limit * sizeof(uint32_t));
 
 	if (NULL == graph1.vertices) /* check if allocation worked */
 	{
@@ -330,7 +328,6 @@ int main(void)
 	graph2.count = 0;
 	graph2.limit = MEMORY_START_SIZE * 2;
 	graph2.vertices = (node_t*)calloc(graph2.limit, sizeof(node_t));
-	graph2.mapping = (uint32_t*)malloc(graph2.limit * sizeof(uint32_t));
 
 	if (!buildGraph(&saveHouses, &edges, &graph2)) /* and find all savehouses which can be reached from the end */
 	{
@@ -730,18 +727,9 @@ bool insertNode(graph_t *graph, node_t n)
 		memcpy(temp, graph->vertices, sizeof(node_t) * graph->count); /* copy data to new memory */
 		free(graph->vertices); /* free old data */
 		graph->vertices = temp; /* adjust */
-
-		uint32_t *temp2 = (uint32_t*)calloc(graph->limit, sizeof(uint32_t)); /* get more memory */
-
-		if (NULL == temp2) return false; /* check if this worked */
-
-		memcpy(temp2, graph->mapping, sizeof(uint32_t) * graph->count); /* copy data to new memory */
-		free(graph->mapping); /* free old data */
-		graph->mapping = temp2; /* adjust */
 	}
 
 	graph->vertices[graph->count] = n; /* insert item */
-	graph->mapping[graph->count] = n.id;
 	graph->count++; /* increment counter */
 
 	return true;
@@ -947,9 +935,7 @@ void freeGraph(graph_t *graph)
 	}
 
 	if (NULL != graph->vertices) free(graph->vertices); /* delete the nodes itself */
-	if (NULL != graph->mapping) free(graph->mapping);
 	graph->vertices = NULL; /* mark it as freed */
-	graph->mapping = NULL; 
 	graph->count = 0; /* meta data */
 	graph->limit = 0;
 }
