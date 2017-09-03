@@ -7,7 +7,6 @@
 #include <stdbool.h> /* bool type */
 #include <inttypes.h> /* PRIu32 etc. */
 #include <errno.h>  /* error handling */
-#include <ctype.h> /* isdigit() */
 
 /* How much memory should be allocated in the beginning */
 #define MEMORY_START_SIZE 32 /* for data */
@@ -72,6 +71,7 @@ typedef struct graph_t /* this represents the graph in a graph-like structure */
 	uint32_t count; /* how many nodes there are */
 	uint32_t limit; /* for how much nodes we have space */
 	node_t *vertices; /* the nodes itself */
+	uint32_t *mapping; /* hastable for mapping ids to indices */
 } graph_t;
 
 bool buildGraph(savehouses_t*, edges_t*, graph_t*);
@@ -99,7 +99,6 @@ uint32_t removeMinNodeFromHeap(graph_t*, heap_t*); /* this gets the "first" (the
 void siftDownHeap(graph_t*, heap_t*, uint32_t); /* this is more for internal use, but basically */
 void siftUpHeap(graph_t*, heap_t*, uint32_t);  /* makes sure the heap is a heap after changing values */
 
-int compare(uint32_t, uint32_t); /* used for qsort() to determine in which way to sort */
 int compare_edges(const void*, const void*); /* these three are just wrappers for compare() */
 int compare_saveHouses(const void*, const void*);
 int compare_nodes(const void*, const void*);
@@ -143,7 +142,7 @@ int main(void)
 
 		return 1;
 	}
-	 
+
 	int result = readData(&saveHouses, &edges); /* try to read in the data, if anything is not correct != 0 gets returned */
 	if (result != RESULT_OK)
 	{
@@ -183,10 +182,10 @@ int main(void)
 
 			return 1;
 		}
-        
-        /* (adjust the space to the size actually used, can free big chunks of unused memory) */
+
+		/* (adjust the space to the size actually used, can free big chunks of unused memory) */
 		memcpy(temp, edges.data, sizeof(edge_t) * edges.count);
-        free(edges.data);
+		free(edges.data);
 		edges.data = temp;
 		edges.limit = edges.count;
 
@@ -229,8 +228,8 @@ int main(void)
 		saveHouses.data = NULL;
 		saveHouses.count = 0;
 
-		freeEdges(&edges); 
-        
+		freeEdges(&edges);
+
 		return 0;
 	}
 
@@ -238,9 +237,9 @@ int main(void)
 	if (edges.count == 0) /* if there are no edges we have to check if start==end==savehouse */
 	{
 		if (globalStartID == globalEndID && checkSaveHouse(&saveHouses, globalStartID))
-        {
+		{
 			fprintf(stdout, "%"PRIu32, globalStartID);
-        }
+		}
 
 		freeSaveHouses(&saveHouses);
 
@@ -251,6 +250,7 @@ int main(void)
 	graph1.count = 0;
 	graph1.limit = MEMORY_START_SIZE * 2;
 	graph1.vertices = (node_t*)calloc(graph1.limit, sizeof(node_t));
+	graph1.mapping = (uint32_t*)malloc(graph1.limit * sizeof(uint32_t));
 
 	if (NULL == graph1.vertices) /* check if allocation worked */
 	{
@@ -296,34 +296,22 @@ int main(void)
 		return 1;
 	}
 
-	savehouses_t validSaveHouses; /* validSaveHouses saves all the id's that can be reached in the first run */
-	validSaveHouses.count = 0;
-	validSaveHouses.limit = MEMORY_START_SIZE;
-	validSaveHouses.data = (uint32_t*)malloc(sizeof(uint32_t) * validSaveHouses.limit);
-
-	if (NULL == validSaveHouses.data) /* check if allocation worked */
-	{
-		fputs(mallocZeroException, stderr);
-
-		freeSaveHouses(&saveHouses);
-		freeEdges(&edges);
-		freeGraph(&graph1);
-
-		return 1;
-	}
-
-	for (size_t i = 0; i < graph1.count; i++) /* every savehouse-nodes with a distance in the range get inserted into validSaveHouses */
-	{
+	freeSaveHouses(&saveHouses); /* delete all the old saveHouses */
+	saveHouses.data = (uint32_t*)calloc(MEMORY_START_SIZE, sizeof(uint32_t)); /* and create "new" ones */
+	saveHouses.limit = MEMORY_START_SIZE;
+	saveHouses.count = 0;
+	
+	for (size_t i = 0; i < graph1.count; i++) 
+	{   /* because on the second run we only have to check the savehouses that could be reached in the first run */
 		if (graph1.vertices[i].isSaveHouse && graph1.vertices[i].distance <= globalDistance)
 		{
-			insertSaveHouse(&validSaveHouses, graph1.vertices[i].id);
+			insertSaveHouse(&saveHouses, graph1.vertices[i].id);
 		}
 	}
 
 	freeGraph(&graph1); /* release the old graph */
 
-	/* sort validSaveHouses for searching later */
-	qsort(validSaveHouses.data, validSaveHouses.count, sizeof(uint32_t), compare_saveHouses);
+	qsort(saveHouses.data, saveHouses.count, sizeof(uint32_t), compare_saveHouses);
 
 	for (size_t i = 0; i < edges.count; i++) /* reverse all the edges (swap start and end id) */
 	{
@@ -342,26 +330,24 @@ int main(void)
 	graph2.count = 0;
 	graph2.limit = MEMORY_START_SIZE * 2;
 	graph2.vertices = (node_t*)calloc(graph2.limit, sizeof(node_t));
+	graph2.mapping = (uint32_t*)malloc(graph2.limit * sizeof(uint32_t));
 
 	if (!buildGraph(&saveHouses, &edges, &graph2)) /* and find all savehouses which can be reached from the end */
 	{
 		fputs(mallocZeroException, stderr); /* if this fails we exit */
 
 		freeSaveHouses(&saveHouses);
-		freeSaveHouses(&validSaveHouses);
 		freeEdges(&edges);
 		freeGraph(&graph2);
 
 		return 1;
 	}
 
-	
 	startIndex = findNode(&graph2, globalStartID); /* find the node from where to start */
 
 	if (INFINITY32 == startIndex) /* find the node with the start id, if it has no neighbours we exit */
 	{
 		freeSaveHouses(&saveHouses);
-		freeSaveHouses(&validSaveHouses);
 		freeEdges(&edges);
 		freeGraph(&graph2);
 
@@ -374,25 +360,23 @@ int main(void)
 		fputs(mallocZeroException, stderr);
 
 		freeSaveHouses(&saveHouses);
-		freeSaveHouses(&validSaveHouses);
 		freeEdges(&edges);
 		freeGraph(&graph2);
 
 		return 1;
 	}
 
-	/* the result is the intersection between the results from direction start->end and results from direction end->start */
+	/* the results are all the saveHouses that are still valid after the second run */
 	for (size_t i = 0; i < graph2.count; i++)
 	{
-		if (true == graph2.vertices[i].isSaveHouse && graph2.vertices[i].distance <= globalDistance
-			&& true == checkSaveHouse(&validSaveHouses, graph2.vertices[i].id))
+		if (true == graph2.vertices[i].isSaveHouse && graph2.vertices[i].distance <= globalDistance)
 		{
 			fprintf(stdout, "%"PRIu32"\n", graph2.vertices[i].id);
+			fflush(stdout);
 		}
 	}
 
 	freeSaveHouses(&saveHouses);
-	freeSaveHouses(&validSaveHouses);
 	freeEdges(&edges);
 	freeGraph(&graph2);
 
@@ -416,7 +400,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		if (NULL == result || 0 != ferror(stdin)) return RESULT_INPUT_ERR; /* this checks if any error occured */
 
-		if (0 == isdigit(line[0])) return RESULT_INPUT_ERR; /* leading white spaces are not allowed */
+		if (line[0] < '0' || line[0] > '9') return RESULT_INPUT_ERR; /* leading white spaces are not allowed */
 
 		char *start, *end, *distance; /* temporary strings for splitting the input */
 
@@ -433,7 +417,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 			break; /* go to savehouse section */
 		}
 
-		if (' ' != start[0] || 0 == isdigit(start[1])) return RESULT_INPUT_ERR;
+		if (' ' != start[0] || start[1] < '0' || start[1] > '9') return RESULT_INPUT_ERR;
 
 		uint32_t endID = strtoul(start, &end, 10); /* parse the second number */
 
@@ -441,7 +425,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		if (ERANGE == errno || endID > 3999999999) return RESULT_OUT_OF_RANGE;
 
-		if (' ' != end[0] || 0 == isdigit(end[1])) return RESULT_INPUT_ERR;
+		if (end[0] != ' ' || end[1] < '0' || end[1] > '9') return RESULT_INPUT_ERR;
 
 		uint32_t distanceIn = strtoul(end, &distance, 10); /* try to parse the last bit as the distance*/
 
@@ -488,7 +472,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		if (NULL == result || 0 != ferror(stdin)) return RESULT_INPUT_ERR; /* this checks if any error occured */
 
-		if (0 == isdigit(line[0])) return RESULT_INPUT_ERR; /* do not accept leading white spaces */
+		if (line[0] < '0' || line[0] > '9') return RESULT_INPUT_ERR; /* do not accept leading white spaces */
 
 		char *endPtr;
 		uint32_t saveHouse = strtoul(line, &endPtr, 10); /* try to parse whatever into a number */
@@ -533,12 +517,12 @@ uint32_t findFirstEdge(edges_t *edges, uint32_t startID)
 {
 	if (0 == edges->count) return INFINITY32;
 
-	register uint32_t left = 0;
-	register uint32_t right = edges->count - 1;
+	uint32_t left = 0;
+	uint32_t right = edges->count - 1;
 
 	while (left <= right && right < edges->count)
 	{
-		register uint32_t middle = left + ((right - left) / 2);
+		uint32_t middle = left + ((right - left) / 2);
 		if (edges->data[middle].startID > startID) right = middle - 1;
 		else if (edges->data[middle].startID < startID) left = middle + 1;
 		else
@@ -577,7 +561,7 @@ bool insertSaveHouse(savehouses_t *saveHouses, uint32_t id)
 	return true;
 }
 
-inline bool checkSaveHouse(savehouses_t *saveHouses, uint32_t houseID)
+bool checkSaveHouse(savehouses_t *saveHouses, uint32_t houseID)
 {   /* do a binsearch in the saveHouses */
 	return (NULL != bsearch(&houseID, saveHouses->data, saveHouses->count, sizeof(uint32_t), compare_saveHouses));
 }
@@ -587,23 +571,22 @@ inline bool checkSaveHouse(savehouses_t *saveHouses, uint32_t houseID)
 /*====COMPARATOR ROUTINES======================================================*/
 int compare_edges(const void *e1, const void *e2)
 {
-	return compare(((edge_t*)e1)->startID, ((edge_t*)e2)->startID);
+	if (((edge_t*)e1)->startID == ((edge_t*)e2)->startID) return 0;
+	else if (((edge_t*)e1)->startID < ((edge_t*)e2)->startID) return -1;
+	else return 1;
 }
 
 int compare_saveHouses(const void *e1, const void *e2)
 {
-	return compare(*((uint32_t*)e1), *((uint32_t*)e2));
+	if (*((uint32_t*)e1) == *((uint32_t*)e2)) return 0;
+	else if (*((uint32_t*)e1) < *((uint32_t*)e2)) return -1;
+	else return 1;
 }
 
 int compare_nodes(const void *e1, const void *e2)
 {
-	return compare(((node_t*)e1)->id, ((node_t*)e2)->id);
-}
-
-inline int compare(uint32_t a, uint32_t b)
-{   /* IDs like 0 and 4000000000 would lead to incorect results, so this clipping is needed */
-	if (a == b) return 0;
-	else if (a < b) return -1;
+	if (((node_t*)e1)->id == ((node_t*)e2)->id) return 0;
+	else if (((node_t*)e1)->id < ((node_t*)e2)->id) return -1;
 	else return 1;
 }
 /*====COMPARATOR ROUTINES======================================================*/
@@ -612,7 +595,7 @@ inline int compare(uint32_t a, uint32_t b)
 /*====GRAPH ROUTINES===========================================================*/
 bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 {
-	if (NULL == graph->vertices) return false;
+	if (NULL == graph->vertices /*|| NULL == graph->mapping*/) return false;
 
 	uint32_t currentID = INFINITY32;
 	for (size_t i = 0; i < edges->count; i++) /* convert all the edges to nodes */
@@ -658,7 +641,7 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 		nn.neighboursCount = 0;
 		nn.neighboursLimit = 0;
 		nn.visited = false;
-		
+
 		if (!insertNode(graph, nn)) return false;
 
 		/* find position where this node belongs */
@@ -684,15 +667,13 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 		{
 			currentID = graph->vertices[i].id; /* this is the id we currently want to find */
 
-			/* just work through all the items in the block explained above
-			(keep going until we enter the next block) */
+											   /* just work through all the items in the block explained above
+											   (keep going until we enter the next block) */
 			while (index < edges->count && edges->data[index].startID == currentID)
 			{
 				uint32_t nodeIndex = findNode(graph, edges->data[index].endID); /* find the node with the endID */
-
-				/* nodeIndex == INFINITY32 means that the corresponding node hat no outgoing edges and is therefore useless */
-
-				if (INFINITY32 != nodeIndex)
+			
+				if (INFINITY32 != nodeIndex) /* nodeIndex == INFINITY32 means that the corresponding node hat no outgoing edges and is therefore useless */
 					if (!insertChildNode(&(graph->vertices[i]), nodeIndex, edges->data[index].distance))
 						return false; /* and try to insert the index into the parent node */
 
@@ -749,9 +730,18 @@ bool insertNode(graph_t *graph, node_t n)
 		memcpy(temp, graph->vertices, sizeof(node_t) * graph->count); /* copy data to new memory */
 		free(graph->vertices); /* free old data */
 		graph->vertices = temp; /* adjust */
+
+		uint32_t *temp2 = (uint32_t*)calloc(graph->limit, sizeof(uint32_t)); /* get more memory */
+
+		if (NULL == temp2) return false; /* check if this worked */
+
+		memcpy(temp2, graph->mapping, sizeof(uint32_t) * graph->count); /* copy data to new memory */
+		free(graph->mapping); /* free old data */
+		graph->mapping = temp2; /* adjust */
 	}
 
 	graph->vertices[graph->count] = n; /* insert item */
+	graph->mapping[graph->count] = n.id;
 	graph->count++; /* increment counter */
 
 	return true;
@@ -832,7 +822,7 @@ void siftDownHeap(graph_t *graph, heap_t *heap, uint32_t index)
 {
 	uint32_t localIndex = index;
 	uint32_t minimum = index; /* assume the root is the biggest */
-	while(true)
+	while (true)
 	{
 		if (LEFT(localIndex) < heap->count) /* compare with left child */
 		{
@@ -847,7 +837,7 @@ void siftDownHeap(graph_t *graph, heap_t *heap, uint32_t index)
 		if (minimum == localIndex) return;
 
 		/* if the assumetion was wrong */
-		register uint32_t t = heap->data[localIndex]; /* just swap the parent with the smaller child */
+		uint32_t t = heap->data[localIndex]; /* just swap the parent with the smaller child */
 		heap->data[localIndex] = heap->data[minimum];
 		heap->data[minimum] = t;
 
@@ -865,7 +855,7 @@ void siftUpHeap(graph_t *graph, heap_t *heap, uint32_t index)
 
 	if (graph->vertices[heap->data[index]].distance >= graph->vertices[heap->data[PARENT(index)]].distance) return; /* abort when we reached our final position */
 
-	register uint32_t t = heap->data[index]; /* swap the node with its parent */
+	uint32_t t = heap->data[index]; /* swap the node with its parent */
 	heap->data[index] = heap->data[PARENT(index)];
 	heap->data[PARENT(index)] = t;
 
@@ -890,7 +880,7 @@ bool dijkstra(graph_t *graph, uint32_t startIndex)
 
 	if (NULL == heap.positions || NULL == heap.data) return false; /* check if the allocations worked */
 
-    memset(heap.positions, INFINITY32, graph->count * sizeof(uint32_t)); /* initalize the positions-array to all be infinity (not in heap) */
+	memset(heap.positions, INFINITY32, graph->count * sizeof(uint32_t)); /* initalize the positions-array to all be infinity (not in heap) */
 
 	graph->vertices[startIndex].distance = 0; /* the startnode can reach its self in no time */
 
@@ -901,7 +891,7 @@ bool dijkstra(graph_t *graph, uint32_t startIndex)
 
 		return false;
 	}
-	
+
 	while (heap.count > 0) /* while there are unprocessed nodes we continue */
 	{
 		register uint32_t index = removeMinNodeFromHeap(graph, &heap); /* get the next node */
@@ -956,8 +946,10 @@ void freeGraph(graph_t *graph)
 		}
 	}
 
-	free(graph->vertices); /* delete the nodes itself */
+	if (NULL != graph->vertices) free(graph->vertices); /* delete the nodes itself */
+	if (NULL != graph->mapping) free(graph->mapping);
 	graph->vertices = NULL; /* mark it as freed */
+	graph->mapping = NULL; 
 	graph->count = 0; /* meta data */
 	graph->limit = 0;
 }

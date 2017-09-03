@@ -10,62 +10,36 @@ namespace GraphDebugger
     {
         public static void Main(string[] args)
         {
-            if (!File.Exists(args[0]))
-            {
-                Console.Error.WriteLine("Input file not found!");
+            // X in [A; B]
+            // Y in [C; D]
+            // -> Y = (X - A) / (B - A) * (D - C) + C
 
-                return;
+            /*int[] mapping = new int[50];
+            for (int i = 0; i < 50; i++)
+                mapping[i] = int.MaxValue;*/
+
+            Random rand = new Random();
+
+            List<int> raw = new List<int>();
+            for (int i = 1; i < 51; i++)
+            {
+                int r = rand.Next(99, 1000);
+                while (raw.Contains(r))
+                    r = rand.Next();
+
+                raw.Add(r);
             }
 
-            StreamReader reader = null;
-            StreamWriter writer = null;
-            try
+            for (int i = 1; i < 51; i++)
             {
-                reader = new StreamReader(File.Open(args[0], FileMode.Open));
+                int R = (1000 - 99) / (51 - 1);
+                int x = raw[i - 1];
+                int y = (x - 1) * R + 99;
 
-                List<string> data = new List<string>();
-                string saveHouses = null;
-                string firstLine = null;
-
-                firstLine = reader.ReadLine();
-
-                while (!reader.EndOfStream)
-                {
-                    string line = reader.ReadLine();
-
-                    if (line.Contains(' '))
-                    {
-                        data.Add(reader.ReadLine());
-                    }
-                    else
-                    {
-                        saveHouses = line + reader.ReadToEnd();
-                    }
-                }
-
-                writer = new StreamWriter(File.Open(args[1], FileMode.Create));
-
-                writer.WriteLine(firstLine);
-
-                while (data.Any())
-                {
-                    writer.WriteLine(data.Last());
-                    data.RemoveAt(data.Count - 1);
-                }
-
-                writer.WriteLine(saveHouses);
+                Console.WriteLine("{0} -> {1} ", x, y);
             }
-            catch(Exception ex)
-            {
-                Console.Error.WriteLine(ex.Message);
-            }
-            finally
-            {
-                reader?.Dispose();
-                reader = null;
-                writer?.Dispose();
-                writer = null;
-            }
+
+            return;
         }
     }
 }
