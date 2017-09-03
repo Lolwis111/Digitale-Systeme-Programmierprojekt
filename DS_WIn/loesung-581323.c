@@ -595,7 +595,7 @@ int compare_nodes(const void *e1, const void *e2)
 /*====GRAPH ROUTINES===========================================================*/
 bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 {
-	if (NULL == graph->vertices /*|| NULL == graph->mapping*/) return false;
+	if (NULL == graph->vertices || NULL == graph->mapping) return false;
 
 	uint32_t currentID = INFINITY32;
 	for (size_t i = 0; i < edges->count; i++) /* convert all the edges to nodes */
@@ -657,6 +657,19 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 		}
 	}
 
+	uint32_t mappingLimit = graph->limit % 2 == 0 ? graph->limit + 1 : graph->limit;
+
+	memset(graph->mapping, INFINITY32, sizeof(uint32_t) * mappingLimit);
+
+	for (size_t i = 0; i < graph->count; i++)
+	{
+		uint32_t hash = graph->vertices[i].id % mappingLimit;
+
+		while (graph->mapping[hash] != INFINITY32) hash = (hash - 1) % mappingLimit;
+
+		graph->mapping[hash] = i;
+	}
+
 	for (size_t i = 0; i < graph->count; i++) /* go through all nodes and set its neighbours */
 	{
 		/* find the first index where this id occurs (since the array is sorted all the elements with the
@@ -671,8 +684,15 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 											   (keep going until we enter the next block) */
 			while (index < edges->count && edges->data[index].startID == currentID)
 			{
-				uint32_t nodeIndex = findNode(graph, edges->data[index].endID); /* find the node with the endID */
-			
+				// uint32_t nodeIndex = findNode(graph, edges->data[index].endID); /* find the node with the endID */
+
+				uint32_t hash = edges->data[index].endID % mappingLimit;
+
+				while (graph->mapping[hash] != INFINITY32
+					&& graph->vertices[graph->mapping[hash]].id != edges->data[index].endID) hash = (hash - 1) % mappingLimit;
+
+				uint32_t nodeIndex = graph->mapping[hash];
+
 				if (INFINITY32 != nodeIndex) /* nodeIndex == INFINITY32 means that the corresponding node hat no outgoing edges and is therefore useless */
 					if (!insertChildNode(&(graph->vertices[i]), nodeIndex, edges->data[index].distance))
 						return false; /* and try to insert the index into the parent node */
@@ -731,7 +751,7 @@ bool insertNode(graph_t *graph, node_t n)
 		free(graph->vertices); /* free old data */
 		graph->vertices = temp; /* adjust */
 
-		uint32_t *temp2 = (uint32_t*)calloc(graph->limit, sizeof(uint32_t)); /* get more memory */
+		uint32_t *temp2 = (uint32_t*)calloc(graph->limit % 2 == 0 ? graph->limit + 1 : graph->limit , sizeof(uint32_t)); /* get more memory */
 
 		if (NULL == temp2) return false; /* check if this worked */
 
@@ -741,7 +761,6 @@ bool insertNode(graph_t *graph, node_t n)
 	}
 
 	graph->vertices[graph->count] = n; /* insert item */
-	graph->mapping[graph->count] = n.id;
 	graph->count++; /* increment counter */
 
 	return true;
