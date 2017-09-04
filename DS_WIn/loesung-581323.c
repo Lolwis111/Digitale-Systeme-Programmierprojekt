@@ -107,6 +107,8 @@ void freeGraph(graph_t*); /* helper methods for freeing complex structures */
 void freeEdges(edges_t*);
 void freeSaveHouses(savehouses_t*);
 
+bool strToLong(char*, uint32_t*);
+
 int readData(savehouses_t*, edges_t*); /* reads in the data from stdin */
 
 const char *mallocZeroException = "malloc ran out of memory while allocating!\n"; /* exception message for when malloc fails */
@@ -171,7 +173,7 @@ int main(void)
 
 	if (edges.count > 0)
 	{
-		edge_t *temp = (edge_t*)malloc(sizeof(edge_t) * edges.count); /* adjust the array size to actual size */
+		edge_t *temp = (edge_t*)realloc(edges.data, sizeof(edge_t) * edges.count);
 
 		if (NULL == temp)
 		{
@@ -184,8 +186,6 @@ int main(void)
 		}
 
 		/* (adjust the space to the size actually used, can free big chunks of unused memory) */
-		memcpy(temp, edges.data, sizeof(edge_t) * edges.count);
-		free(edges.data);
 		edges.data = temp;
 		edges.limit = edges.count;
 
@@ -202,7 +202,7 @@ int main(void)
 	if (saveHouses.count > 0)
 	{
 		/* adjust size of savehouses to actual size */
-		uint32_t *temp2 = (uint32_t*)malloc(sizeof(edge_t) * saveHouses.count);
+		uint32_t *temp2 = (uint32_t*)realloc(saveHouses.data, sizeof(edge_t) * saveHouses.count);
 
 		if (NULL == temp2)
 		{
@@ -214,8 +214,6 @@ int main(void)
 			return 1;
 		}
 
-		memcpy(temp2, saveHouses.data, sizeof(uint32_t) * saveHouses.count);
-		free(saveHouses.data);
 		saveHouses.data = temp2;
 		saveHouses.limit = saveHouses.count;
 
@@ -296,9 +294,7 @@ int main(void)
 		return 1;
 	}
 
-	freeSaveHouses(&saveHouses); /* delete all the old saveHouses */
-	saveHouses.data = (uint32_t*)calloc(MEMORY_START_SIZE, sizeof(uint32_t)); /* and create "new" ones */
-	saveHouses.limit = MEMORY_START_SIZE;
+	memset(saveHouses.data, 0, saveHouses.limit * sizeof(uint32_t));
 	saveHouses.count = 0;
 	
 	for (size_t i = 0; i < graph1.count; i++) 
@@ -369,7 +365,7 @@ int main(void)
 	/* the results are all the saveHouses that are still valid after the second run */
 	for (size_t i = 0; i < graph2.count; i++)
 	{
-		if (true == graph2.vertices[i].isSaveHouse && graph2.vertices[i].distance <= globalDistance)
+		if (graph2.vertices[i].isSaveHouse && graph2.vertices[i].distance <= globalDistance)
 		{
 			fprintf(stdout, "%"PRIu32"\n", graph2.vertices[i].id);
 			fflush(stdout);
@@ -404,14 +400,11 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		char *start, *end, *distance; /* temporary strings for splitting the input */
 
+		errno = 0;
 		uint32_t startID = strtoul(line, &start, 10); /* parse the first number (start points to after the number) */
 
-		if (start == line) return RESULT_INPUT_ERR; /* error */
-
-		if (ERANGE == errno || startID > 3999999999) return RESULT_OUT_OF_RANGE;
-
 		/* only accept \n, use dos2unix or something like that if input has Windows line endings (\r\n) */
-		if ('\n' == *start || '\0' == *start) /* if the line ends after the first number we entered the savehouse section */
+		if ('\n' == *start || 0 == *start) /* if the line ends after the first number we entered the savehouse section */
 		{
 			last = startID; /* save the savehouse for later */
 			break; /* go to savehouse section */
@@ -419,6 +412,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		if (' ' != start[0] || start[1] < '0' || start[1] > '9') return RESULT_INPUT_ERR;
 
+		errno = 0;
 		uint32_t endID = strtoul(start, &end, 10); /* parse the second number */
 
 		if (start == end) return RESULT_INPUT_ERR;  /* error */
@@ -427,13 +421,14 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		if (end[0] != ' ' || end[1] < '0' || end[1] > '9') return RESULT_INPUT_ERR;
 
+		errno = 0;
 		uint32_t distanceIn = strtoul(end, &distance, 10); /* try to parse the last bit as the distance*/
 
 		if (distance == end) return RESULT_INPUT_ERR;  /* error */
 
 		if (ERANGE == errno || distanceIn > 3999999999) return RESULT_OUT_OF_RANGE;
 
-		if (0 == strlen(distance) || '\n' == *distance) /* the triple can only be followed by a newline character (or nothing) */
+		if (0 == *distance || '\n' == *distance) /* the triple can only be followed by a newline character (or nothing) */
 		{
 			if (firstLine) /* the very first line has a special purpose */
 			{
@@ -451,7 +446,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 					newEdge.endID = endID;
 					newEdge.distance = distanceIn;
 
-					if (false == insertEdge(edges, &newEdge)) return RESULT_MALLOC_ERR; /* try to insert the edge */
+					if (!insertEdge(edges, &newEdge)) return RESULT_MALLOC_ERR; /* try to insert the edge */
 				}
 			}
 		}
@@ -475,18 +470,47 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 		if (line[0] < '0' || line[0] > '9') return RESULT_INPUT_ERR; /* do not accept leading white spaces */
 
 		char *endPtr;
+		errno = 0;
 		uint32_t saveHouse = strtoul(line, &endPtr, 10); /* try to parse whatever into a number */
 
 		if (endPtr == line) return RESULT_INPUT_ERR; /* error */
 
 		if (ERANGE == errno || saveHouse > 3999999999) return RESULT_OUT_OF_RANGE;
 
-		if (0 == strlen(endPtr) || '\n' == *endPtr) /* the number can only be followed by newline character (or nothing) */
+		if (0 == *endPtr || '\n' == *endPtr) /* the number can only be followed by newline character (or nothing) */
 		{
 			if (!insertSaveHouse(saveHouses, saveHouse)) return RESULT_MALLOC_ERR; /* try to insert the savehouse */
 		}
 		else return RESULT_INPUT_ERR;
 	}
+}
+
+bool strToLong(char *str, uint32_t *result)
+{
+	uint64_t res = 0;
+
+	if (NULL == str || *str < '0' || *str > '9') return false;
+
+	res = 0;
+
+	for (size_t i = 0; i < 11; i++)
+	{
+		if (*str < '0' || *str > '9') break;
+
+		res *= 10;
+		res += *str - '0';
+		*str++;
+	}
+
+	if (res > 3999999999)
+	{
+		*result = UINT32_MAX;
+		return false;
+	}
+
+	*result = (uint32_t)res;
+
+	return true;
 }
 /*====UTIL ROUTINES============================================================*/
 
@@ -498,12 +522,10 @@ bool insertEdge(edges_t *edges, edge_t *e)
 	{
 		edges->limit = edges->limit << 1; /* if yes increase limit accordingly */
 
-		edge_t *temp = (edge_t*)calloc(edges->limit, sizeof(edge_t)); /* and get new memory in the new size */
+		edge_t *temp = (edge_t*)realloc(edges->data, edges->limit * sizeof(edge_t)); /* and get new memory in the new size */
 
 		if (temp == NULL) return false; /* check if that worked */
 
-		memcpy(temp, edges->data, sizeof(edge_t) * edges->count); /* copy the old data to the new array */
-		free(edges->data); /* free the old data */
 		edges->data = temp; /* set our pointer to that new array */
 	}
 
@@ -546,12 +568,10 @@ bool insertSaveHouse(savehouses_t *saveHouses, uint32_t id)
 	{
 		saveHouses->limit = saveHouses->limit << 1;
 
-		uint32_t *temp = (uint32_t*)malloc(sizeof(uint32_t) * saveHouses->limit);
+		uint32_t *temp = (uint32_t*)realloc(saveHouses->data, sizeof(uint32_t) * saveHouses->limit);
 
 		if (NULL == temp) return false;
 
-		memcpy(temp, saveHouses->data, sizeof(uint32_t) * saveHouses->count);
-		free(saveHouses->data);
 		saveHouses->data = temp;
 	}
 
@@ -657,17 +677,20 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 		}
 	}
 
-	uint32_t mappingLimit = graph->limit % 2 == 0 ? graph->limit + 1 : graph->limit;
+	uint32_t mappingLimit = graph->limit;
+	for (size_t i = 0; i < mappingLimit; i++) graph->mapping[i] = INFINITY32; /* set every entry to empty */
 
-	memset(graph->mapping, INFINITY32, sizeof(uint32_t) * mappingLimit);
-
-	for (size_t i = 0; i < graph->count; i++)
+	for (size_t i = 0; i < graph->count; i++) /* go through all the nodes there are */
 	{
-		uint32_t hash = graph->vertices[i].id % mappingLimit;
+		uint32_t h = graph->vertices[i].id % mappingLimit; /* and use its id as key for the hash map */
+		
+		uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
+		if (mappingLimit > 20)
+			h2 = ((graph->vertices[i].id % (mappingLimit - 2)) + 1);
 
-		while (graph->mapping[hash] != INFINITY32) hash = (hash - 1) % mappingLimit;
+		while (graph->mapping[h] != INFINITY32) h = (h - h2) % mappingLimit; /*  */
 
-		graph->mapping[hash] = i;
+		graph->mapping[h] = i; /* and save index in hashtable */
 	}
 
 	for (size_t i = 0; i < graph->count; i++) /* go through all nodes and set its neighbours */
@@ -680,18 +703,20 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 		{
 			currentID = graph->vertices[i].id; /* this is the id we currently want to find */
 
-											   /* just work through all the items in the block explained above
-											   (keep going until we enter the next block) */
+			/* just work through all the items in the block explained above
+			(keep going until we enter the next block) */
 			while (index < edges->count && edges->data[index].startID == currentID)
 			{
-				// uint32_t nodeIndex = findNode(graph, edges->data[index].endID); /* find the node with the endID */
+				uint32_t h = edges->data[index].endID % mappingLimit; /* use id we want to find as key */
 
-				uint32_t hash = edges->data[index].endID % mappingLimit;
+				uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
+				if (mappingLimit > 20)
+					h2 = ((edges->data[index].endID % (mappingLimit - 2)) + 1);
 
-				while (graph->mapping[hash] != INFINITY32
-					&& graph->vertices[graph->mapping[hash]].id != edges->data[index].endID) hash = (hash - 1) % mappingLimit;
+				while (graph->mapping[h] != INFINITY32
+					&& graph->vertices[graph->mapping[h]].id != edges->data[index].endID) h = (h - h2) % mappingLimit; /* and search for it in the hashtable // TODO: make faster */
 
-				uint32_t nodeIndex = graph->mapping[hash];
+				uint32_t nodeIndex = graph->mapping[h]; /* then get the index */
 
 				if (INFINITY32 != nodeIndex) /* nodeIndex == INFINITY32 means that the corresponding node hat no outgoing edges and is therefore useless */
 					if (!insertChildNode(&(graph->vertices[i]), nodeIndex, edges->data[index].distance))
@@ -719,12 +744,10 @@ bool insertChildNode(node_t *parent, uint32_t indexOfChild, uint64_t distanceToC
 	{
 		parent->neighboursLimit += SUB_NODE_START_SIZE; /* if no, increase memory  */
 
-		neighbour_t *temp = (neighbour_t*)calloc(parent->neighboursLimit, sizeof(neighbour_t)); /* allocate more */
+		neighbour_t *temp = (neighbour_t*)realloc(parent->neighbours, parent->neighboursLimit * sizeof(neighbour_t)); /* allocate more */
 
 		if (NULL == temp) return false; /* check if it worked */
 
-		memcpy(temp, parent->neighbours, sizeof(neighbour_t) * parent->neighboursCount); /* copy the content and free old data */
-		free(parent->neighbours);
 		parent->neighbours = temp;
 	}
 
@@ -743,20 +766,16 @@ bool insertNode(graph_t *graph, node_t n)
 	{
 		graph->limit = graph->limit << 1; /* if => increase size */
 
-		node_t *temp = (node_t*)calloc(graph->limit, sizeof(node_t)); /* get more memory */
-
+		node_t *temp = (node_t*)realloc(graph->vertices, graph->limit * sizeof(node_t)); /* get more memory */
+		
 		if (NULL == temp) return false; /* check if this worked */
 
-		memcpy(temp, graph->vertices, sizeof(node_t) * graph->count); /* copy data to new memory */
-		free(graph->vertices); /* free old data */
 		graph->vertices = temp; /* adjust */
 
-		uint32_t *temp2 = (uint32_t*)calloc(graph->limit % 2 == 0 ? graph->limit + 1 : graph->limit , sizeof(uint32_t)); /* get more memory */
+		uint32_t *temp2 = (uint32_t*)realloc(graph->mapping, graph->limit * sizeof(uint32_t)); /* get more memory */
 
 		if (NULL == temp2) return false; /* check if this worked */
 
-		memcpy(temp2, graph->mapping, sizeof(uint32_t) * graph->count); /* copy data to new memory */
-		free(graph->mapping); /* free old data */
 		graph->mapping = temp2; /* adjust */
 	}
 
@@ -802,12 +821,10 @@ bool insertNodeToHeap(graph_t *graph, heap_t *heap, uint32_t element)
 	{
 		heap->limit = heap->limit << 1; /* increase memory limit */
 
-		uint32_t *temp = (uint32_t*)calloc(heap->limit, sizeof(uint32_t)); /* get new memory in bigger size */
+		uint32_t *temp = (uint32_t*)realloc(heap->data, heap->limit * sizeof(uint32_t)); /* get new memory in bigger size */
 
 		if (NULL == temp) return false; /* check if that worked */
 
-		memcpy(temp, heap->data, sizeof(uint32_t) * heap->count); /* copy the data to the new array */
-		free(heap->data); /* delete the old array */
 		heap->data = temp; /* adjust the pointers */
 	}
 
@@ -839,32 +856,32 @@ uint32_t removeMinNodeFromHeap(graph_t *graph, heap_t *heap)
 
 void siftDownHeap(graph_t *graph, heap_t *heap, uint32_t index)
 {
-	uint32_t localIndex = index;
+	// uint32_t localIndex = index;
 	uint32_t minimum = index; /* assume the root is the biggest */
 	while (true)
 	{
-		if (LEFT(localIndex) < heap->count) /* compare with left child */
+		if (LEFT(index) < heap->count) /* compare with left child */
 		{
-			if (graph->vertices[heap->data[LEFT(localIndex)]].distance < graph->vertices[heap->data[minimum]].distance)
-				minimum = LEFT(localIndex);
+			if (graph->vertices[heap->data[LEFT(index)]].distance < graph->vertices[heap->data[minimum]].distance)
+				minimum = LEFT(index);
 
 			/* if the left children does not exists the right children can not exist */
-			if (RIGHT(localIndex) < heap->count && graph->vertices[heap->data[RIGHT(localIndex)]].distance < graph->vertices[heap->data[minimum]].distance) /* compare with right child */
-				minimum = RIGHT(localIndex);
+			if (RIGHT(index) < heap->count && graph->vertices[heap->data[RIGHT(index)]].distance < graph->vertices[heap->data[minimum]].distance) /* compare with right child */
+				minimum = RIGHT(index);
 		}
 
-		if (minimum == localIndex) return;
+		if (minimum == index) return;
 
 		/* if the assumetion was wrong */
-		uint32_t t = heap->data[localIndex]; /* just swap the parent with the smaller child */
-		heap->data[localIndex] = heap->data[minimum];
+		uint32_t t = heap->data[index]; /* just swap the parent with the smaller child */
+		heap->data[index] = heap->data[minimum];
 		heap->data[minimum] = t;
 
-		t = heap->positions[heap->data[localIndex]];
-		heap->positions[heap->data[localIndex]] = heap->positions[heap->data[minimum]];
+		t = heap->positions[heap->data[index]];
+		heap->positions[heap->data[index]] = heap->positions[heap->data[minimum]];
 		heap->positions[heap->data[minimum]] = t;
 
-		localIndex = minimum; /* go one layer down */
+		index = minimum; /* go one layer down */
 	}
 }
 

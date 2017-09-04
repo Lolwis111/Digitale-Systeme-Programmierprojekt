@@ -4,43 +4,49 @@
 #include <string.h>
 #include <stdint.h>
 
-#define SIZE 1000000
-
-typedef struct pair
-{
-	uint32_t key;
-	uint32_t value;
-} pair;
+bool strToLong(char*, uint32_t*);
 
 int main()
 {
-	pair* hashmap = (pair*)malloc(sizeof(pair) * SIZE);
+	char *str1 = "1 1 1";
 
-	if (NULL == hashmap) return 1;
-
-	for (uint32_t i = 0; i < SIZE; i++) hashmap[i].key = UINT32_MAX;
-
-	for (uint32_t i = 0; i < SIZE; i++)
+	uint32_t val = 0;
+	if (strToLong(str1, &val))
 	{
-		uint32_t m = i % SIZE;
-
-		while (hashmap[m % SIZE].key != UINT32_MAX)
-		{
-			m++;
-		}
-
-		hashmap[m % SIZE].key = m % SIZE;
-		hashmap[m % SIZE].value = i;
-
-		printf("%u ", m % SIZE);
+		fprintf(stdout, "\n%u", val);
 	}
-
-	puts("\n");
-
-	for (uint32_t i = 0; i < SIZE; i++)
+	else
 	{
-		printf("(%u; %u) ", hashmap[i].key, hashmap[i].value);
+		fputs("\nERROR\n", stderr);
 	}
 
 	return 0;
+}
+
+bool strToLong(char *str, uint32_t *result)
+{
+	uint64_t res = 0;
+
+	if (NULL == str || *str < '0' || *str > '9') return false;
+
+	res = 0;
+
+	for (size_t i = 0; i < 11; i++)
+	{
+		if (*str < '0' || *str > '9') break;
+
+		res *= 10;
+		res += *str - '0';
+		*str++;
+	}
+
+	if (res > 3999999999)
+	{
+		*result = UINT32_MAX;
+		return false;
+	}
+
+	*result = (uint32_t)res;
+
+	return true;
 }
