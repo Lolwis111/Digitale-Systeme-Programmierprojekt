@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.IO;
+using System.Diagnostics;
 
 namespace GraphDebugger
 {
@@ -10,36 +11,32 @@ namespace GraphDebugger
     {
         public static void Main(string[] args)
         {
-            // X in [A; B]
-            // Y in [C; D]
-            // -> Y = (X - A) / (B - A) * (D - C) + C
-
-            /*int[] mapping = new int[50];
-            for (int i = 0; i < 50; i++)
-                mapping[i] = int.MaxValue;*/
-
-            Random rand = new Random();
-
-            List<int> raw = new List<int>();
-            for (int i = 1; i < 51; i++)
+            for (uint i = 0; i < 3999999999UL; i++)
             {
-                int r = rand.Next(99, 1000);
-                while (raw.Contains(r))
-                    r = rand.Next();
+                Process process = Process.Start("DS_WIn.exe");
 
-                raw.Add(r);
+                
+
+                StreamWriter writer = process.StandardInput;
+
+                writer.WriteLine("{0} {0} {0}", i);
+                writer.Write("{0}", i);
+                writer.Flush();
+                writer.Close();
+
+                process.WaitForExit();
+
+                StreamReader reader = process.StandardOutput;
+
+                if (uint.TryParse(reader.ReadLine(), out uint result))
+                {
+                    if (result != i) Console.WriteLine("calculated wrongly!");
+                }
+                else
+                {
+                    Console.WriteLine("Number out of range {0}", i);
+                }
             }
-
-            for (int i = 1; i < 51; i++)
-            {
-                int R = (1000 - 99) / (51 - 1);
-                int x = raw[i - 1];
-                int y = (x - 1) * R + 99;
-
-                Console.WriteLine("{0} -> {1} ", x, y);
-            }
-
-            return;
         }
     }
 }

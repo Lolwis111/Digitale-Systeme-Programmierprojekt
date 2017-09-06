@@ -383,8 +383,8 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 	bool firstLine = true; /* just to know if we read the first line (the first line is handled differently) */
 	while (1)
 	{
-		char line[35]; /* buffer */
-		char *result = fgets(line, 34, stdin); /* read up to 34 characers (3 numbers of which each is smaller than 4*10^9 + 3 spaces) */
+		char line[65]; /* buffer */
+		char *result = fgets(line, 64, stdin); /* read up to 64 characers (3 numbers in 64 Bit (just to get outoufbounds)) */
 
 		if (NULL == result && feof(stdin)) /* this means that the file ended before any savhouses were found, which is fine */
 		{
@@ -396,57 +396,57 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		if (line[0] < '0' || line[0] > '9') return RESULT_INPUT_ERR; /* leading white spaces are not allowed */
 
-		char *start, *end, *distance; /* temporary strings for splitting the input */
+		char *startPtr, *endPtr, *distancePtr; /* temporary strings for splitting the input */
 
 		errno = 0;
-		uint32_t startID = strtoul(line, &start, 10); /* parse the first number (start points to after the number) */
+		uint64_t startID = strtoull(line, &startPtr, 10); /* parse the first number (start points to after the number) */
 
-		if (start == line) return RESULT_INPUT_ERR;  /* error */
+		if (startPtr == line) return RESULT_INPUT_ERR;  /* error */
 
-		if (ERANGE == errno || startID > 3999999999) return RESULT_OUT_OF_RANGE; /* out of range? */
+		if (ERANGE == errno || startID >= 4000000000ULL) return RESULT_OUT_OF_RANGE; /* out of range? */
 
 		/* only accept \n, use dos2unix or something like that if input has Windows line endings (\r\n) */
-		if ('\n' == start[0] || 0 == start[0]) /* if the line ends after the first number we entered the savehouse section */
+		if (!firstLine && '\n' == startPtr[0] || 0 == startPtr[0]) /* if the line ends after the first number we entered the savehouse section */
 		{
 			last = startID; /* save the savehouse for later */
 			break; /* go to savehouse section */
 		}
 
-		if (' ' != start[0] || start[1] < '0' || start[1] > '9') return RESULT_INPUT_ERR;
+		if (' ' != startPtr[0] || startPtr[1] < '0' || startPtr[1] > '9') return RESULT_INPUT_ERR;
 
 		errno = 0;
-		uint32_t endID = strtoul(start, &end, 10); /* parse the second number */
+		uint64_t endID = strtoull(startPtr, &endPtr, 10); /* parse the second number */
 
-		if (start == end) return RESULT_INPUT_ERR;  /* error */
+		if (startPtr == endPtr) return RESULT_INPUT_ERR;  /* error */
 
-		if (ERANGE == errno || endID > 3999999999) return RESULT_OUT_OF_RANGE;
+		if (ERANGE == errno || endID >= 4000000000ULL) return RESULT_OUT_OF_RANGE;
 
-		if (' ' != end[0] || end[1] < '0' || end[1] > '9') return RESULT_INPUT_ERR;
+		if (' ' != endPtr[0] || endPtr[1] < '0' || endPtr[1] > '9') return RESULT_INPUT_ERR;
 
 		errno = 0;
-		uint32_t distanceIn = strtoul(end, &distance, 10); /* try to parse the last bit as the distance*/
+		uint64_t distance = strtoull(endPtr, &distancePtr, 10); /* try to parse the last bit as the distance*/
 
-		if (distance == end) return RESULT_INPUT_ERR;  /* error */
+		if (distancePtr == endPtr) return RESULT_INPUT_ERR;  /* error */
 
-		if (ERANGE == errno || distanceIn > 3999999999) return RESULT_OUT_OF_RANGE;
+		if (ERANGE == errno || distance >= 4000000000ULL) return RESULT_OUT_OF_RANGE;
 
-		if (0 == distance[0] || '\n' == distance[0]) /* the triple can only be followed by a newline character (or nothing) */
+		if (0 == distancePtr[0] || '\n' == distancePtr[0]) /* the triple can only be followed by a newline character (or nothing) */
 		{
 			if (firstLine) /* the very first line has a special purpose */
 			{
-				globalStartID = startID;
-				globalEndID = endID;
-				globalDistance = distanceIn;
+				globalStartID = (uint32_t)startID;
+				globalEndID = (uint32_t)endID;
+				globalDistance = distance;
 				firstLine = false;
 			}
 			else /* every other triple is an edge of the graph */
 			{
-				if (distanceIn <= globalDistance) /* filter out edges which are too long anyways */
+				if (distance <= globalDistance) /* filter out edges which are too long anyways */
 				{
 					edge_t newEdge;
-					newEdge.startID = startID;
-					newEdge.endID = endID;
-					newEdge.distance = distanceIn;
+					newEdge.startID = (uint32_t)startID;
+					newEdge.endID = (uint32_t)endID;
+					newEdge.distance = distance;
 
 					if (!insertEdge(edges, &newEdge)) return RESULT_MALLOC_ERR; /* try to insert the edge */
 				}
@@ -462,8 +462,8 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 		/* end when the file is empty */
 		if (feof(stdin)) return RESULT_OK;
 
-		char line[15];
-		char *result = fgets(line, 13, stdin); /* read a line (now we are only looking for one number, so buffer is smaller) */
+		char line[25];
+		char *result = fgets(line, 23, stdin); /* read a line (now we are only looking for one number, so buffer is smaller) */
 
 		if (NULL == result && feof(stdin)) return RESULT_OK; /* if nothing returned and the file is empty we are finished */
 
@@ -473,15 +473,15 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 		char *endPtr;
 		errno = 0;
-		uint32_t saveHouse = strtoul(line, &endPtr, 10); /* try to parse whatever into a number */
+		uint64_t saveHouse = strtoull(line, &endPtr, 10); /* try to parse whatever into a number */
 
 		if (endPtr == line) return RESULT_INPUT_ERR; /* error */
 
-		if (ERANGE == errno || saveHouse > 3999999999) return RESULT_OUT_OF_RANGE;
+		if (ERANGE == errno || saveHouse >= 4000000000ULL) return RESULT_OUT_OF_RANGE;
 
 		if (0 == *endPtr || '\n' == *endPtr) /* the number can only be followed by newline character (or nothing) */
 		{
-			if (!insertSaveHouse(saveHouses, saveHouse)) return RESULT_MALLOC_ERR; /* try to insert the savehouse */
+			if (!insertSaveHouse(saveHouses, (uint32_t)saveHouse)) return RESULT_MALLOC_ERR; /* try to insert the savehouse */
 		}
 		else return RESULT_INPUT_ERR;
 	}
@@ -894,6 +894,7 @@ bool dijkstra(graph_t *graph, uint32_t startIndex)
 	heap_t heap; /* create new heap for dijkstra */
 	heap.count = 0;
 	heap.limit = graph->count / 2; /* TODO: find good start size */
+	if (heap.limit == 0) heap.limit = 2;
 	heap.data = (uint32_t*)calloc(heap.limit, sizeof(uint32_t));
 
 	heap.positions = (uint32_t*)malloc(graph->count * sizeof(uint32_t)); /* positions saves the index in the heap array of each possible item */
