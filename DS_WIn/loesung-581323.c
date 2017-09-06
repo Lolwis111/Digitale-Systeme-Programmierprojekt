@@ -9,8 +9,8 @@
 #include <errno.h>  /* error handling */
 
 /* How much memory should be allocated in the beginning */
-#define MEMORY_START_SIZE 32 /* for data */
-#define SUB_NODE_START_SIZE 2 /* for neighbours in a node */
+#define MEMORY_START_SIZE 20 /* for data */
+#define SUB_NODE_START_SIZE 6 /* for neighbours in a node */
 #define INFINITY32 UINT32_MAX /* infinity for dijkstra, because all numbers are smaller */
 #define INFINITY64 UINT64_MAX /* than 4*10^9 we can use the values above that for whatever */
 
@@ -30,24 +30,24 @@ typedef struct edge_t
 
 typedef struct edges_t
 {
+	edge_t *data; /* pointer to data itself */
 	uint32_t count; /* size of actually used memory */
 	uint32_t limit; /* size of allocated memory */
-	edge_t *data; /* pointer to data itself */
 } edges_t;
 
-bool insertEdge(edges_t*, edge_t*); /* tries to insert an edge */
+bool insertEdge(edges_t*__restrict, edge_t*__restrict); /* tries to insert an edge */
 
-uint32_t findFirstEdge(edges_t*, uint32_t); /* finds the first index of the nodes with the given id */
+uint32_t findFirstEdge(edges_t*__restrict, const uint32_t); /* finds the first index of the nodes with the given id */
 
 typedef struct savehouses_t
 {
+	uint32_t *data; /* the savehouses */
 	uint32_t count; /* how many savehouses this has */
 	uint32_t limit; /* how much space we have */
-	uint32_t *data; /* the savehouses */
 } savehouses_t;
 
-bool insertSaveHouse(savehouses_t*, uint32_t); /* tries to insert a savehouse id */
-bool checkSaveHouse(savehouses_t*, uint32_t); /* checks if the given id is a savehouse */
+bool insertSaveHouse(savehouses_t*__restrict, uint32_t); /* tries to insert a savehouse id */
+bool checkSaveHouse(savehouses_t*__restrict, uint32_t); /* checks if the given id is a savehouse */
 
 typedef struct neighbour_t /* represents one neighbour of a node */
 {
@@ -68,19 +68,19 @@ typedef struct node_t /* structured data to work with */
 
 typedef struct graph_t /* this represents the graph in a graph-like structure */
 {
+	node_t *vertices; /* the nodes itself */
 	uint32_t count; /* how many nodes there are */
 	uint32_t limit; /* for how much nodes we have space */
-	node_t *vertices; /* the nodes itself */
 	uint32_t *mapping; /* hastable for mapping ids to indices */
 } graph_t;
 
-bool buildGraph(savehouses_t*, edges_t*, graph_t*);
+bool buildGraph(savehouses_t*__restrict, edges_t*__restrict, graph_t*__restrict);
 
-bool dijkstra(graph_t*, uint32_t); /* perform dijkstra on graph starting with index */
+bool dijkstra(graph_t*__restrict, uint32_t); /* perform dijkstra on graph starting with index */
 
-uint32_t findNode(graph_t*, uint32_t); /* find node with id in graph and give index */
-bool insertChildNode(node_t*, uint32_t, uint64_t); /* inserts a childnode into the parent node */
-bool insertNode(graph_t*, node_t); /* inserts a node into the node collection */
+uint32_t findNode(graph_t*__restrict, const uint32_t); /* find node with id in graph and give index */
+bool insertChildNode(node_t*__restrict, uint32_t, uint64_t); /* inserts a childnode into the parent node */
+bool insertNode(graph_t*__restrict, node_t); /* inserts a node into the node collection */
 
 #define LEFT(INDEX) ((INDEX << 1) | 1) /* calculate left child */
 #define RIGHT(INDEX) ((INDEX << 1) + 2) /* calculate right child */
@@ -88,16 +88,16 @@ bool insertNode(graph_t*, node_t); /* inserts a node into the node collection */
 
 typedef struct heap_t /* this represents the heap */
 {
-	uint32_t count; /* how many elements are in the heap */
-	uint32_t limit; /* how much capacity the heap currently has */
 	uint32_t *data; /* the data */
 	uint32_t *positions; /* saves which element is where in the heap (boost) */
+	uint32_t count; /* how many elements are in the heap */
+	uint32_t limit; /* how much capacity the heap currently has */
 } heap_t;
 
-bool insertNodeToHeap(graph_t*, heap_t*, uint32_t); /* this inserts the given value into the heap */
-uint32_t removeMinNodeFromHeap(graph_t*, heap_t*); /* this gets the "first" (the smallest) element from the heap */
-void siftDownHeap(graph_t*, heap_t*, uint32_t); /* this is more for internal use, but basically */
-void siftUpHeap(graph_t*, heap_t*, uint32_t);  /* makes sure the heap is a heap after changing values */
+bool insertNodeToHeap(graph_t*__restrict, heap_t*__restrict, uint32_t); /* this inserts the given value into the heap */
+uint32_t removeMinNodeFromHeap(graph_t*__restrict, heap_t*__restrict); /* this gets the "first" (the smallest) element from the heap */
+void siftDownHeap(graph_t*__restrict, heap_t*__restrict, uint32_t); /* this is more for internal use, but basically */
+void siftUpHeap(graph_t*__restrict, heap_t*__restrict, uint32_t);  /* makes sure the heap is a heap after changing values */
 
 int compare_edges(const void*, const void*); /* these three are just wrappers for compare() */
 int compare_saveHouses(const void*, const void*);
@@ -107,7 +107,7 @@ void freeGraph(graph_t*); /* helper methods for freeing complex structures */
 void freeEdges(edges_t*);
 void freeSaveHouses(savehouses_t*);
 
-int readData(savehouses_t*, edges_t*); /* reads in the data from stdin */
+int readData(savehouses_t*__restrict, edges_t*__restrict); /* reads in the data from stdin */
 
 const char *mallocZeroException = "malloc ran out of memory while allocating!\n"; /* exception message for when malloc fails */
 const char *invalidFormatException = "the given is data is not in a valid format!\n"; /* exception message for when the input format is invalid */
@@ -294,7 +294,7 @@ int main(void)
 	}
 
 	saveHouses.count = 0; /* reset the saveHouses */
-	
+
 	for (size_t i = 0; i < graph1.count; i++) 
 	{   /* because on the second run we only have to check the savehouses that could be reached in the first run */
 		if (graph1.vertices[i].isSaveHouse && graph1.vertices[i].distance <= globalDistance)
@@ -377,7 +377,7 @@ int main(void)
 	return 0;
 }
 
-int readData(savehouses_t *saveHouses, edges_t *edges)
+int readData(savehouses_t *__restrict saveHouses, edges_t *__restrict edges)
 {
 	uint32_t last = 0; /* temporary value */
 	bool firstLine = true; /* just to know if we read the first line (the first line is handled differently) */
@@ -406,9 +406,9 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 		if (ERANGE == errno || startID >= 4000000000ULL) return RESULT_OUT_OF_RANGE; /* out of range? */
 
 		/* only accept \n, use dos2unix or something like that if input has Windows line endings (\r\n) */
-		if (!firstLine && '\n' == startPtr[0] || 0 == startPtr[0]) /* if the line ends after the first number we entered the savehouse section */
+		if (!firstLine && ('\n' == startPtr[0] || 0 == startPtr[0])) /* if the line ends after the first number we entered the savehouse section */
 		{
-			last = startID; /* save the savehouse for later */
+			last = (uint32_t)startID; /* save the savehouse for later */
 			break; /* go to savehouse section */
 		}
 
@@ -490,7 +490,7 @@ int readData(savehouses_t *saveHouses, edges_t *edges)
 
 
 /*====EDGE ROUTINES============================================================*/
-bool insertEdge(edges_t *edges, edge_t *e)
+bool insertEdge(edges_t *__restrict edges, edge_t *__restrict e)
 {
 	if (edges->count == edges->limit) /* check if we reached the memory limit */
 	{
@@ -509,7 +509,7 @@ bool insertEdge(edges_t *edges, edge_t *e)
 	return true;
 }
 
-uint32_t findFirstEdge(edges_t *edges, uint32_t startID)
+uint32_t findFirstEdge(edges_t *__restrict edges, const uint32_t startID)
 {
 	if (0 == edges->count) return INFINITY32; /*  */
 
@@ -537,7 +537,7 @@ uint32_t findFirstEdge(edges_t *edges, uint32_t startID)
 
 
 /*====SAVEHOUSE ROUTINES=======================================================*/
-bool insertSaveHouse(savehouses_t *saveHouses, uint32_t id)
+bool insertSaveHouse(savehouses_t *__restrict saveHouses, uint32_t id)
 {
 	if (saveHouses->count == saveHouses->limit) /* check if memory limit is reached */
 	{
@@ -556,7 +556,7 @@ bool insertSaveHouse(savehouses_t *saveHouses, uint32_t id)
 	return true; /* true means that it went well */
 }
 
-bool checkSaveHouse(savehouses_t *saveHouses, uint32_t houseID)
+inline bool checkSaveHouse(savehouses_t *__restrict saveHouses, uint32_t houseID)
 {   /* do a binsearch in the saveHouses */
 	return (NULL != bsearch(&houseID, saveHouses->data, saveHouses->count, sizeof(uint32_t), compare_saveHouses));
 }
@@ -588,13 +588,14 @@ int compare_nodes(const void *e1, const void *e2)
 
 
 /*====GRAPH ROUTINES===========================================================*/
-bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
+bool buildGraph(savehouses_t *__restrict saveHouses, edges_t *__restrict edges, graph_t *__restrict graph)
 {
 	if (NULL == graph || NULL == edges || NULL == saveHouses) return false;
 	if (NULL == graph->vertices || NULL == graph->mapping) return false;
 
-	uint32_t currentID = INFINITY32;
-	for (size_t i = 0; i < edges->count; i++) /* convert all the edges to nodes */
+	register uint32_t currentID = INFINITY32;
+	register size_t i = 0;
+	for (i = 0; i < edges->count; i++) /* convert all the edges to nodes */
 	{
 		if (currentID == edges->data[i].startID) continue; /* filter duplicates (the same startid may occour multiple times because one node can have many neighbours) */
 
@@ -654,27 +655,27 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 		}
 	}
 
-	uint32_t mappingLimit = graph->limit;
-	for (size_t i = 0; i < mappingLimit; i++) graph->mapping[i] = INFINITY32; /* set every entry to empty */
+	register  uint32_t mappingLimit = graph->limit;
+	for (i = 0; i < mappingLimit; i++) graph->mapping[i] = INFINITY32; /* set every entry to empty */
 
-	for (size_t i = 0; i < graph->count; i++) /* go through all the nodes there are */
+	for (i = 0; i < graph->count; i++) /* go through all the nodes there are */
 	{
-		uint32_t h = graph->vertices[i].id % mappingLimit; /* and use its id as key for the hash map */
+		register uint32_t h = graph->vertices[i].id % mappingLimit; /* and use its id as key for the hash map */
 		
-		uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
+		register uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
 		if (mappingLimit > 20)
 			h2 = ((graph->vertices[i].id % (mappingLimit - 2)) + 1);
 
-		while (graph->mapping[h] != INFINITY32) h = (h - h2) % mappingLimit; /*  */
+		while (graph->mapping[h] != INFINITY32) h = (h - h2) % mappingLimit; /* find a free position  */
 
 		graph->mapping[h] = i; /* and save index in hashtable */
 	}
 
-	for (size_t i = 0; i < graph->count; i++) /* go through all nodes and set its neighbours */
+	for (i = 0; i < graph->count; i++) /* go through all nodes and set its neighbours */
 	{
 		/* find the first index where this id occurs (since the array is sorted all the elements with the
 		same id are in a block, so by finding the first of that block we can iterate through all of them) */
-		uint32_t index = findFirstEdge(edges, graph->vertices[i].id);
+		register uint32_t index = findFirstEdge(edges, graph->vertices[i].id);
 
 		if (INFINITY32 != index)
 		{
@@ -684,16 +685,16 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 			(keep going until we enter the next block) */
 			while (index < edges->count && edges->data[index].startID == currentID)
 			{
-				uint32_t h = edges->data[index].endID % mappingLimit; /* use id we want to find as key */
+				register uint32_t h = edges->data[index].endID % mappingLimit; /* use id we want to find as key */
 
-				uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
+				register uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
 				if (mappingLimit > 20)
 					h2 = ((edges->data[index].endID % (mappingLimit - 2)) + 1);
 
 				while (graph->mapping[h] != INFINITY32
 					&& graph->vertices[graph->mapping[h]].id != edges->data[index].endID) h = (h - h2) % mappingLimit; /* and search for it in the hashtable // TODO: make faster */
 
-				uint32_t nodeIndex = graph->mapping[h]; /* then get the index */
+				register uint32_t nodeIndex = graph->mapping[h]; /* then get the index */
 
 				if (INFINITY32 != nodeIndex) /* nodeIndex == INFINITY32 means that the corresponding node hat no outgoing edges and is therefore useless */
 					if (!insertChildNode(&(graph->vertices[i]), nodeIndex, edges->data[index].distance))
@@ -715,7 +716,7 @@ bool buildGraph(savehouses_t *saveHouses, edges_t *edges, graph_t *graph)
 	return true;
 }
 
-bool insertChildNode(node_t *parent, uint32_t indexOfChild, uint64_t distanceToChild)
+bool insertChildNode(node_t *__restrict parent, uint32_t indexOfChild, uint64_t distanceToChild)
 {
 	if (parent->neighboursCount == parent->neighboursLimit) /* check if there is space left */
 	{
@@ -737,7 +738,7 @@ bool insertChildNode(node_t *parent, uint32_t indexOfChild, uint64_t distanceToC
 	return true;
 }
 
-bool insertNode(graph_t *graph, node_t n)
+bool insertNode(graph_t *__restrict graph, node_t n)
 {
 	if (graph->count == graph->limit) /* check if the memory limit is reached */
 	{
@@ -762,14 +763,14 @@ bool insertNode(graph_t *graph, node_t n)
 	return true;
 }
 
-uint32_t findNode(graph_t *graph, uint32_t id)
+uint32_t findNode(graph_t *__restrict graph, const uint32_t id)
 {   /* TODO: make this efficient (dont ic it is yet); this function is executed >50% of runtime */
 	if (0 == graph->count) return INFINITY32; /* if there are no entries its not there */
 
 	if (graph->vertices[0].id == id) return 0; /* check borders because they are slow to reach with binsearch */
 	if (graph->vertices[graph->count - 1].id == id) return graph->count - 1;
 
-	uint32_t left = 0, right = graph->count, middle = 0; /* perform a binsearch to find the id */
+	register uint32_t left = 0, right = graph->count, middle = 0; /* perform a binsearch to find the id */
 
 	while (left <= right && right <= graph->count)
 	{
@@ -785,7 +786,7 @@ uint32_t findNode(graph_t *graph, uint32_t id)
 
 
 /*====HEAP ROUTINES============================================================*/
-bool insertNodeToHeap(graph_t *graph, heap_t *heap, uint32_t element)
+bool insertNodeToHeap(graph_t *__restrict graph, heap_t *__restrict heap, uint32_t element)
 {
 	if (INFINITY32 != heap->positions[element]) /* check if the element is in the heap allready */
 	{
@@ -814,11 +815,11 @@ bool insertNodeToHeap(graph_t *graph, heap_t *heap, uint32_t element)
 	return true;
 }
 
-uint32_t removeMinNodeFromHeap(graph_t *graph, heap_t *heap)
+uint32_t removeMinNodeFromHeap(graph_t *__restrict graph, heap_t *__restrict heap)
 {
 	if (0 == heap->count) return INFINITY32;
 
-	uint32_t result = heap->data[0]; /* remove first item (the smallest) */
+	register uint32_t result = heap->data[0]; /* remove first item (the smallest) */
 
 	heap->count--;
 
@@ -831,7 +832,7 @@ uint32_t removeMinNodeFromHeap(graph_t *graph, heap_t *heap)
 	return result; /* return the value */
 }
 
-void siftDownHeap(graph_t *graph, heap_t *heap, uint32_t index)
+void siftDownHeap(graph_t *__restrict graph, heap_t *__restrict heap, uint32_t index)
 {
 	// uint32_t localIndex = index;
 	uint32_t minimum = index; /* assume the root is the biggest */
@@ -852,7 +853,7 @@ void siftDownHeap(graph_t *graph, heap_t *heap, uint32_t index)
 		if (minimum == index) return;
 
 		/* if the assumetion was wrong */
-		uint32_t t = heap->data[index]; /* just swap the parent with the smaller child */
+		register uint32_t t = heap->data[index]; /* just swap the parent with the smaller child */
 		heap->data[index] = heap->data[minimum];
 		heap->data[minimum] = t;
 
@@ -864,7 +865,7 @@ void siftDownHeap(graph_t *graph, heap_t *heap, uint32_t index)
 	}
 }
 
-void siftUpHeap(graph_t *graph, heap_t *heap, uint32_t index)
+void siftUpHeap(graph_t *__restrict graph, heap_t *__restrict heap, uint32_t index)
 {
 	while (true)
 	{
@@ -874,7 +875,7 @@ void siftUpHeap(graph_t *graph, heap_t *heap, uint32_t index)
 
 		if (graph->vertices[heap->data[index]].distance >= graph->vertices[heap->data[parent]].distance) return; /* abort when we reached our final position */
 
-		uint32_t t = heap->data[index]; /* swap the node with its parent */
+		register uint32_t t = heap->data[index]; /* swap the node with its parent */
 		heap->data[index] = heap->data[parent];
 		heap->data[parent] = t;
 
@@ -889,11 +890,11 @@ void siftUpHeap(graph_t *graph, heap_t *heap, uint32_t index)
 
 
 /*====DIJKSTRA ROUTINE=========================================================*/
-bool dijkstra(graph_t *graph, uint32_t startIndex)
+bool dijkstra(graph_t *__restrict graph, uint32_t startIndex)
 {
 	heap_t heap; /* create new heap for dijkstra */
 	heap.count = 0;
-	heap.limit = graph->count / 2; /* TODO: find good start size */
+	heap.limit = graph->count / 4; /* TODO: find good start size */
 	if (heap.limit == 0) heap.limit = 2;
 	heap.data = (uint32_t*)calloc(heap.limit, sizeof(uint32_t));
 
@@ -922,8 +923,7 @@ bool dijkstra(graph_t *graph, uint32_t startIndex)
 		neighbour_t *neighbours = graph->vertices[index].neighbours; /* get the neighbours from that node */
 		graph->vertices[index].visited = true; /* mark it as visited */
 
-		uint32_t neighbourIndex;
-		for (neighbourIndex = 0; neighbourIndex < graph->vertices[index].neighboursCount; neighbourIndex++) /* and update distance to all its neighbours */
+		for (register size_t neighbourIndex = 0; neighbourIndex < graph->vertices[index].neighboursCount; neighbourIndex++) /* and update distance to all its neighbours */
 		{
 			uint32_t childIndex = neighbours[neighbourIndex].index;
 			uint64_t newDistance = graph->vertices[index].distance + neighbours[neighbourIndex].distance; /* calculate new distance */
