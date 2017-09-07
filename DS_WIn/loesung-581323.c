@@ -9,8 +9,8 @@
 #include <errno.h>  /* error handling */
 
 /* How much memory should be allocated in the beginning */
-#define MEMORY_START_SIZE 20 /* for data */
-#define SUB_NODE_START_SIZE 6 /* for neighbours in a node */
+#define MEMORY_START_SIZE 32 /* for data */
+#define SUB_NODE_START_SIZE 4 /* for neighbours in a node */
 #define INFINITY32 UINT32_MAX /* infinity for dijkstra, because all numbers are smaller */
 #define INFINITY64 UINT64_MAX /* than 4*10^9 we can use the values above that for whatever */
 
@@ -76,15 +76,15 @@ typedef struct graph_t /* this represents the graph in a graph-like structure */
 
 bool buildGraph(savehouses_t*__restrict, edges_t*__restrict, graph_t*__restrict);
 
-bool dijkstra(graph_t*__restrict, uint32_t); /* perform dijkstra on graph starting with index */
+bool dijkstra(graph_t*__restrict, const uint32_t); /* perform dijkstra on graph starting with index */
 
 uint32_t findNode(graph_t*__restrict, const uint32_t); /* find node with id in graph and give index */
-bool insertChildNode(node_t*__restrict, uint32_t, uint64_t); /* inserts a childnode into the parent node */
+bool insertChildNode(node_t*__restrict, const uint32_t, const uint64_t); /* inserts a childnode into the parent node */
 bool insertNode(graph_t*__restrict, node_t); /* inserts a node into the node collection */
 
-#define LEFT(INDEX) ((INDEX << 1) | 1) /* calculate left child */
-#define RIGHT(INDEX) ((INDEX << 1) + 2) /* calculate right child */
-#define PARENT(INDEX) ((INDEX - 1) >> 1) /* calculate parent index */
+#define LEFT(INDEX) ((INDEX << 1) | 1) /* calculate left child (2n + 1)*/
+#define RIGHT(INDEX) ((INDEX << 1) + 2) /* calculate right child (2n + 2)*/
+#define PARENT(INDEX) ((INDEX - 1) >> 1) /* calculate parent index ((n - 1) / 2)*/
 
 typedef struct heap_t /* this represents the heap */
 {
@@ -304,6 +304,14 @@ int main(void)
 	}
 
 	freeGraph(&graph1); /* release the old graph */
+
+	if (saveHouses.count == 0) /* if the first run determined that none of the savehouses are reachable we can stop right here */
+	{
+		freeSaveHouses(&saveHouses);
+		freeEdges(&edges);
+
+		return 0;
+	}
 
 	qsort(saveHouses.data, saveHouses.count, sizeof(uint32_t), compare_saveHouses); /* sort the savehouses for binsearch */
 
@@ -643,13 +651,13 @@ bool buildGraph(savehouses_t *__restrict saveHouses, edges_t *__restrict edges, 
 
 		/* find position where this node belongs */
 		/* (this is like one run of bubblesort ) */
-		for (size_t j = graph->count - 1; j > 0; j--)
+		for (register size_t jj = graph->count - 1; jj > 0; jj--)
 		{
-			if (graph->vertices[j].id < graph->vertices[j - 1].id)
+			if (graph->vertices[jj].id < graph->vertices[jj - 1].id)
 			{
-				node_t temp = graph->vertices[j];
-				graph->vertices[j] = graph->vertices[j - 1];
-				graph->vertices[j - 1] = temp;
+				node_t temp = graph->vertices[jj];
+				graph->vertices[jj] = graph->vertices[jj - 1];
+				graph->vertices[jj - 1] = temp;
 			}
 			else break;
 		}
@@ -662,11 +670,7 @@ bool buildGraph(savehouses_t *__restrict saveHouses, edges_t *__restrict edges, 
 	{
 		register uint32_t h = graph->vertices[i].id % mappingLimit; /* and use its id as key for the hash map */
 		
-		register uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
-		if (mappingLimit > 20)
-			h2 = ((graph->vertices[i].id % (mappingLimit - 2)) + 1);
-
-		while (graph->mapping[h] != INFINITY32) h = (h - h2) % mappingLimit; /* find a free position  */
+		while (INFINITY32 != graph->mapping[h]) h = (h - 1) % mappingLimit; /* find a free position  */
 
 		graph->mapping[h] = i; /* and save index in hashtable */
 	}
@@ -687,12 +691,8 @@ bool buildGraph(savehouses_t *__restrict saveHouses, edges_t *__restrict edges, 
 			{
 				register uint32_t h = edges->data[index].endID % mappingLimit; /* use id we want to find as key */
 
-				register uint32_t h2 = 1; /* for lists bigger 20 elements use double hashing */
-				if (mappingLimit > 20)
-					h2 = ((edges->data[index].endID % (mappingLimit - 2)) + 1);
-
 				while (graph->mapping[h] != INFINITY32
-					&& graph->vertices[graph->mapping[h]].id != edges->data[index].endID) h = (h - h2) % mappingLimit; /* and search for it in the hashtable // TODO: make faster */
+					&& graph->vertices[graph->mapping[h]].id != edges->data[index].endID) h = (h - 1) % mappingLimit; /* and search for it in the hashtable // TODO: make faster */
 
 				register uint32_t nodeIndex = graph->mapping[h]; /* then get the index */
 
@@ -716,7 +716,7 @@ bool buildGraph(savehouses_t *__restrict saveHouses, edges_t *__restrict edges, 
 	return true;
 }
 
-bool insertChildNode(node_t *__restrict parent, uint32_t indexOfChild, uint64_t distanceToChild)
+bool insertChildNode(node_t *__restrict parent, const uint32_t indexOfChild, const uint64_t distanceToChild)
 {
 	if (parent->neighboursCount == parent->neighboursLimit) /* check if there is space left */
 	{
@@ -738,11 +738,11 @@ bool insertChildNode(node_t *__restrict parent, uint32_t indexOfChild, uint64_t 
 	return true;
 }
 
-bool insertNode(graph_t *__restrict graph, node_t n)
+bool insertNode(graph_t *__restrict graph, node_t node)
 {
 	if (graph->count == graph->limit) /* check if the memory limit is reached */
 	{
-		graph->limit = graph->limit << 1; /* if => increase size */
+		graph->limit = graph->limit << 1; /* if yes => increase size */
 
 		node_t *temp = (node_t*)realloc(graph->vertices, graph->limit * sizeof(node_t)); /* get more memory */
 		
@@ -757,14 +757,14 @@ bool insertNode(graph_t *__restrict graph, node_t n)
 		graph->mapping = temp2; /* adjust */
 	}
 
-	graph->vertices[graph->count] = n; /* insert item */
+	graph->vertices[graph->count] = node; /* insert item */
 	graph->count++; /* increment counter */
 
 	return true;
 }
 
 uint32_t findNode(graph_t *__restrict graph, const uint32_t id)
-{   /* TODO: make this efficient (dont ic it is yet); this function is executed >50% of runtime */
+{
 	if (0 == graph->count) return INFINITY32; /* if there are no entries its not there */
 
 	if (graph->vertices[0].id == id) return 0; /* check borders because they are slow to reach with binsearch */
@@ -890,11 +890,11 @@ void siftUpHeap(graph_t *__restrict graph, heap_t *__restrict heap, uint32_t ind
 
 
 /*====DIJKSTRA ROUTINE=========================================================*/
-bool dijkstra(graph_t *__restrict graph, uint32_t startIndex)
+bool dijkstra(graph_t *__restrict graph, const uint32_t startIndex)
 {
 	heap_t heap; /* create new heap for dijkstra */
 	heap.count = 0;
-	heap.limit = graph->count / 4; /* TODO: find good start size */
+	heap.limit = graph->count / 2; /* TODO: find good start size */
 	if (heap.limit == 0) heap.limit = 2;
 	heap.data = (uint32_t*)calloc(heap.limit, sizeof(uint32_t));
 
