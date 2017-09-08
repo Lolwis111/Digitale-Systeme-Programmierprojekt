@@ -21,6 +21,10 @@
   <ItemGroup>
     <ClCompile Include="loesung-581323.c" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="D:\[VM EXCHANGE]\Makefile" />
+    <None Include="D:\[VM EXCHANGE]\test.sh" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
     <ProjectGuid>{5364FAE6-8DA8-4A69-BE61-04BE0D759ACD}</ProjectGuid>
